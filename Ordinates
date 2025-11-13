@@ -1,0 +1,74 @@
+from coppeliasim_zmqremoteapi_client import RemoteAPIClient
+import time
+
+# Connect to CoppeliaSim
+client = RemoteAPIClient()
+sim = client.getObject('sim')
+print("✅ Connected to CoppeliaSim")
+
+# Get NiryoOne root
+niryo = sim.getObject('/NiryoOne')
+
+# Get *only* the first 6 "Joint" objects = arm joints
+all_joints = sim.getObjectsInTree(niryo, sim.object_joint_type, 0)
+arm_joints = [j for j in all_joints if sim.getObjectAlias(j) == "Joint"][:6]
+
+print("🤖 Arm joints detected:")
+for i, j in enumerate(arm_joints, start=1):
+    print(f"  Joint {i}: {sim.getObjectAlias(j)} (handle {j})")
+
+# Get gripper joints
+left_gripper  = sim.getObject('/NiryoOne/NiryoLGripper/leftJoint1')
+right_gripper = sim.getObject('/NiryoOne/NiryoLGripper/rightJoint1')
+
+# ----------------------------
+# Arm movement
+# ----------------------------
+def move_arm(joint_angles, wait=2.0):
+    if len(joint_angles) != len(arm_joints):
+        raise ValueError(f"Expected {len(arm_joints)} joint angles, got {len(joint_angles)}")
+
+    for j, angle in zip(arm_joints, joint_angles):
+        sim.setJointTargetPosition(j, angle)
+
+    print(f"✅ Moving arm to: {joint_angles}")
+    time.sleep(wait)
+
+# ----------------------------
+# Gripper control (fixed)
+# ----------------------------
+def control_gripper(open=True):
+    max_force = 1000    # adjust if too weak
+    velocity = 100.0   # rad/s for opening/closing
+
+    if open:
+        # Close gripper
+        sim.setJointTargetVelocity(left_gripper, -velocity)
+        sim.setJointTargetVelocity(right_gripper, velocity)
+        sim.setJointForce(left_gripper, max_force)
+        sim.setJointForce(right_gripper, max_force)
+        print("🔴 Gripper closing...")
+    else:
+         # Open gripper
+        sim.setJointTargetVelocity(left_gripper,  velocity)
+        sim.setJointTargetVelocity(right_gripper, -velocity)
+        sim.setJointForce(left_gripper, max_force)
+        sim.setJointForce(right_gripper, max_force)
+        print("🟢 Gripper opening...")
+
+    time.sleep(1.5)  # give time for motion
+
+
+# ----------------------------
+# Example usage
+# ----------------------------
+if __name__ == "__main__":
+    # Move to home
+    move_arm([0.0,0.0,0.0,0.0,0.0,0.0])
+
+    # Another pose
+    move_arm([0.5, -0.5, 0.7, -0.7, 0.2, -0.2])
+
+    # Gripper test
+    control_gripper(open=True)
+    control_gripper(open=False)
