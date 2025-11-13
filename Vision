@@ -1,0 +1,52 @@
+from coppeliasim_zmqremoteapi_client import RemoteAPIClient
+import time
+
+# Connect to CoppeliaSim Remote API
+client = RemoteAPIClient('localhost', 23000)  # default ZeroMQ port
+sim = client.getObject('sim')
+
+# Get handles for robot and gripper joints
+robot_target = sim.getObject('/target')          # Dummy object target
+gripper_joint = sim.getObject('/gripper_joint')  # Replace with your robot's joint name
+
+def move_to_xyz(x, y, z):
+    """Move the robot target to specific coordinates."""
+    pose = sim.getObjectPose(robot_target, -1)
+    pose[0] = x
+    pose[1] = y
+    pose[2] = z
+    sim.setObjectPose(robot_target, -1, pose)
+    print(f"Moving to ({x}, {y}, {z})")
+
+def control_gripper(action):
+    """Control gripper joint to open or close."""
+    if action == 'open':
+        sim.setJointTargetPosition(gripper_joint, 0.04)  # Adjust angle for fully open
+        print("Gripper opened.")
+    elif action == 'close':
+        sim.setJointTargetPosition(gripper_joint, 0.0)   # Adjust angle for fully closed
+        print("Gripper closed.")
+    else:
+        print("Invalid gripper command.")
+
+if __name__ == "__main__":
+    sim.startSimulation()
+
+    while True:
+        cmd = input("Enter command ('move', 'open', 'close', 'exit'): ").strip().lower()
+        if cmd == 'move':
+            x = float(input("Enter X coordinate: "))
+            y = float(input("Enter Y coordinate: "))
+            z = float(input("Enter Z coordinate: "))
+            move_to_xyz(x, y, z)
+        elif cmd == 'open':
+            control_gripper('open')
+        elif cmd == 'close':
+            control_gripper('close')
+        elif cmd == 'exit':
+            print("Stopping simulation.")
+            sim.stopSimulation()
+            break
+        else:
+            print("Invalid command.")
+        time.sleep(1)
