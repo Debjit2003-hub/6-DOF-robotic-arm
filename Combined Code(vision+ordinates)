@@ -1,0 +1,114 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from time import sleep
+import time
+from coppeliasim_zmqremoteapi_client import RemoteAPIClient
+
+# --- Setup and Initialization ---
+
+# Connect to CoppeliaSim
+client = RemoteAPIClient()
+sim = client.require('sim')
+print("✅ Connected to CoppeliaSim")
+
+# Get NiryoOne root
+niryo = sim.getObject('/NiryoOne')
+
+# Get arm joints (first 6 'Joint' objects)
+all_joints = sim.getObjectsInTree(niryo, sim.object_joint_type, 0)
+arm_joints = [j for j in all_joints if sim.getObjectAlias(j) == "Joint"][:6]
+
+print("🤖 Arm joints detected:")
+for i, j in enumerate(arm_joints, start=1):
+    print(f"  Joint {i}: {sim.getObjectAlias(j)} (handle {j})")
+
+# Get gripper joints
+left_gripper  = sim.getObject('/NiryoOne/NiryoLGripper/leftJoint1')
+right_gripper = sim.getObject('/NiryoOne/NiryoLGripper/rightJoint1')
+
+# Get vision sensor handle
+vision_sensor_handle = sim.getObject('/visionSensor')  # Adjust if your sensor's name is different
+
+# --- Arm Movement Function ---
+
+def move_arm(joint_angles, wait=2.0):
+    """Moves the robotic arm to the specified joint angles."""
+    if len(joint_angles) != len(arm_joints):
+        raise ValueError(f"Expected {len(arm_joints)} joint angles, got {len(joint_angles)}")
+
+    for j, angle in zip(arm_joints, joint_angles):
+        sim.setJointTargetPosition(j, angle)
+
+    print(f"✅ Moving arm to: {joint_angles}")
+    time.sleep(wait)
+
+# --- Gripper Control Function ---
+
+def control_gripper(open_gripper=True):
+    """Opens or closes the NiryoOne gripper."""
+    max_force = 1000    # adjust if too weak
+    velocity = 100.0   # rad/s for opening/closing
+
+    if open_gripper:
+        # Open gripper
+        sim.setJointTargetVelocity(left_gripper,  velocity)
+        sim.setJointTargetVelocity(right_gripper, -velocity)
+        print("🟢 Gripper opening...")
+    else:
+        # Close gripper
+        sim.setJointTargetVelocity(left_gripper, -velocity)
+        sim.setJointTargetVelocity(right_gripper, velocity)
+        print("🔴 Gripper closing...")
+
+    # Apply force regardless of direction
+    sim.setJointForce(left_gripper, max_force)
+    sim.setJointForce(right_gripper, max_force)
+    time.sleep(1.5)  # give time for motion
+
+# --- Vision Sensor Function ---
+
+def capture_and_display_image():
+    """Captures an image from the vision sensor and displays it using matplotlib."""
+    
+    # Get one frame
+    image, res = sim.getVisionSensorImg(vision_sensor_handle)
+    
+    # Process the raw image data
+    img_np = np.frombuffer(image, dtype=np.uint8)
+    # Reshape (height, width, channels)
+    img_np = img_np.reshape((res[1], res[0], 3)) 
+    # Flip the image vertically (CoppeliaSim images are upside down)
+    img_np = img_np[::-1, :, :]  
+
+    print(f"🖼️ Captured image with resolution: {res[0]}x{res[1]}")
+    
+    # Display the image
+    plt.imshow(img_np)
+    plt.title("Vision Sensor Output")
+    plt.axis('off')
+    plt.show()
+
+# --- Example Usage (Main Execution Block) ---
+
+if __name__ == "__main__":
+    
+    # Start the simulation
+    sim.startSimulation()
+    sleep(0.1)  # Allow the simulation to update
+
+    # 1. Move to home pose
+    move_arm([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+
+    # 2. Another pose for better view/test
+    move_arm([0.5, -0.5, 0.7, -0.7, 0.2, -0.2])
+
+    # 3. Gripper test
+    control_gripper(open_gripper=False) # Close
+    control_gripper(open_gripper=True)  # Open
+
+    # 4. Capture and display image
+    capture_and_display_image()
+
+    # Stop the simulation
+    sim.stopSimulation()
+    print("🛑 Simulation stopped.")
